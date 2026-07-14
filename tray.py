@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta
 from PIL import Image, ImageDraw
 from config import (
-    PROCESS_NAME, COOLDOWN_MIN, SESSION_MAX_MIN, OVERRIDE_SESSION_MAX_MIN, POLL_INTERVAL_SEC, OVERRIDE_FILE,
+    PROCESS_NAMES, COOLDOWN_MIN, SESSION_MAX_MIN, OVERRIDE_SESSION_MAX_MIN, POLL_INTERVAL_SEC, OVERRIDE_FILE,
     COLOR_GREEN, COLOR_RED, COLOR_BLUE
 )
 try:
@@ -61,7 +61,7 @@ def get_status_text(state, running):
         return "Ready"
 
 def trigger_force_end():
-    kill_process(PROCESS_NAME)
+    kill_process(PROCESS_NAMES)
     state = load_state()
     if state["session_active"]:
         now = datetime.now()
@@ -127,7 +127,7 @@ def run_daemon():
 
     while running_daemon:
         now = datetime.now()
-        running = is_running(PROCESS_NAME)
+        running = is_running(PROCESS_NAMES)
 
         if running:
             if not state["session_active"]:
@@ -146,7 +146,7 @@ def run_daemon():
 
                 elif state["last_start"] and now - state["last_start"] < timedelta(minutes=COOLDOWN_MIN):
                     remaining = timedelta(minutes=COOLDOWN_MIN) - (now - state["last_start"])
-                    kill_process(PROCESS_NAME)
+                    kill_process(PROCESS_NAMES)
                     log_event("blocked_cooldown", remaining_seconds=int(remaining.total_seconds()))
 
                 else:
@@ -159,7 +159,7 @@ def run_daemon():
             else:
                 limit = OVERRIDE_SESSION_MAX_MIN if state.get("via_override") else SESSION_MAX_MIN
                 if now - state["last_start"] > timedelta(minutes=limit):
-                    kill_process(PROCESS_NAME)
+                    kill_process(PROCESS_NAMES)
                     log_event("session_time_exceeded", limit_min=limit)
                     state["session_active"] = False
                     save_state(state)
@@ -176,7 +176,7 @@ def run_daemon():
 def start_tray():
     global icon
     state = load_state()
-    running = is_running(PROCESS_NAME)
+    running = is_running(PROCESS_NAMES)
     
     if running:
         color = COLOR_GREEN

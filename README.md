@@ -56,7 +56,7 @@ pip install textual pystray pyperclip Pillow
 
 You can customize the limiter behavior and styling in the `config.py` file:
 
-- `PROCESS_NAME`: The executable filename of the application you want to limit (e.g., `Telegram.exe`).
+- `PROCESS_NAMES`: A list of executable filenames of the applications you want to limit (e.g., `["Telegram.exe", "discord.exe"]`).
 - `COOLDOWN_MIN`: The mandatory cooldown duration in minutes between sessions.
 - `SESSION_MAX_MIN`: The maximum allowed session length in minutes.
 - `OVERRIDE_SESSION_MAX_MIN`: The session duration granted after successfully completing the override challenge.

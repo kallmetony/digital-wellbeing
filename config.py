@@ -5,7 +5,7 @@ STATE_FILE = os.path.join(APPDATA, "tg_limiter_state.json")
 LOG_FILE = os.path.join(APPDATA, "tg_limiter_log.jsonl")
 OVERRIDE_FILE = os.path.join(APPDATA, "tg_limiter_override.json")
 
-PROCESS_NAME = "Telegram.exe"
+PROCESS_NAMES = ["Telegram.exe"]
 COOLDOWN_MIN = 15
 SESSION_MAX_MIN = 5
 OVERRIDE_SESSION_MAX_MIN = 5
