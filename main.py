@@ -290,15 +290,53 @@ def show_stats_cli():
     app = StatsApp(stats_text)
     app.run()
 
+
+def install_startup():
+    try:
+        startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
+        vbs_path = os.path.join(startup_dir, "wellbeing_limiter.vbs")
+        
+        main_py = os.path.abspath(sys.argv[0])
+        pythonw = sys.executable.replace("python.exe", "pythonw.exe")
+        
+        vbs_content = f'Set WshShell = CreateObject("Wscript.Shell")\nWshShell.Run """{pythonw}"" ""{main_py}""", 0, False'
+        
+        with open(vbs_path, "w", encoding="utf-8") as f:
+            f.write(vbs_content)
+        print(f"[SUCCESS] Startup script created at: {vbs_path}")
+        print("The app will now run automatically in the background when you log in.")
+    except Exception as e:
+        print(f"[ERROR] Failed to install startup script: {e}")
+
+
+def remove_startup():
+    try:
+        startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
+        vbs_path = os.path.join(startup_dir, "wellbeing_limiter.vbs")
+        if os.path.exists(vbs_path):
+            os.remove(vbs_path)
+            print(f"[SUCCESS] Removed startup script from: {vbs_path}")
+        else:
+            print("Startup script was not installed.")
+    except Exception as e:
+        print(f"[ERROR] Failed to remove startup script: {e}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--override", action="store_true", help="request emergency access in TUI")
     parser.add_argument("--stats", action="store_true", help="show statistics in TUI")
+    parser.add_argument("--install-startup", action="store_true", help="install wellbeing limiter to Windows startup")
+    parser.add_argument("--remove-startup", action="store_true", help="remove wellbeing limiter from Windows startup")
     args = parser.parse_args()
 
     if args.override:
         request_override_cli()
     elif args.stats:
         show_stats_cli()
+    elif args.install_startup:
+        install_startup()
+    elif args.remove_startup:
+        remove_startup()
     else:
         start_tray()

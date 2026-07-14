@@ -10,6 +10,10 @@ from config import (
     PROCESS_NAME, COOLDOWN_MIN, SESSION_MAX_MIN, OVERRIDE_SESSION_MAX_MIN, POLL_INTERVAL_SEC, OVERRIDE_FILE,
     COLOR_GREEN, COLOR_RED, COLOR_BLUE
 )
+try:
+    from config import SHOW_EXIT_OPTION
+except ImportError:
+    SHOW_EXIT_OPTION = True
 from state_manager import load_state, save_state, load_override, log_event
 from process_monitor import is_running, kill_process
 
@@ -78,15 +82,19 @@ def get_menu(state, running):
     # Force end is enabled if Telegram is running
     force_end_enabled = running
     
-    return pystray.Menu(
+    menu_items = [
         pystray.MenuItem(f"Status: {status_text}", lambda: None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Request Override", lambda: open_override_console(), enabled=override_enabled),
         pystray.MenuItem("Force End Session", lambda: trigger_force_end(), enabled=force_end_enabled),
         pystray.MenuItem("Show Statistics", lambda: open_stats_console()),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Exit", lambda: exit_app())
-    )
+    ]
+    
+    if SHOW_EXIT_OPTION:
+        menu_items.append(pystray.Menu.SEPARATOR)
+        menu_items.append(pystray.MenuItem("Exit", lambda: exit_app()))
+        
+    return pystray.Menu(*menu_items)
 
 def update_icon_status(state, running):
     global icon
