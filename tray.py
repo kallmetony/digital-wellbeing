@@ -69,6 +69,8 @@ def trigger_force_end():
         log_event("session_ended_manually", duration_seconds=int(duration))
         state["session_active"] = False
         save_state(state)
+    else:
+        log_event("session_ended_manually")
     # Immediately update tray icon
     update_icon_status(state, False)
 

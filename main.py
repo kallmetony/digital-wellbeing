@@ -223,7 +223,7 @@ class StatsApp(App):
         padding: 1 2;
         border: tall #313244;
         margin-bottom: 1;
-        height: 10;
+        height: 11;
     }
     
     #close_btn {
@@ -253,7 +253,8 @@ class StatsApp(App):
                     "session_started": 0,
                     "blocked_cooldown": 0,
                     "override_granted": 0,
-                    "override_failed": 0
+                    "override_failed": 0,
+                    "session_ended_manually": 0
                 }
             
             self.daily_data[date_str]["total_events"] += 1
@@ -267,6 +268,8 @@ class StatsApp(App):
                 self.daily_data[date_str]["override_granted"] += 1
             elif evt == "override_failed":
                 self.daily_data[date_str]["override_failed"] += 1
+            elif evt == "session_ended_manually":
+                self.daily_data[date_str]["session_ended_manually"] += 1
                 
         self.active_days = sorted(list(self.daily_data.keys()))
         self.current_index = len(self.active_days) - 1 # Default to latest day
@@ -343,7 +346,8 @@ class StatsApp(App):
                 "session_started": 0,
                 "blocked_cooldown": 0,
                 "override_granted": 0,
-                "override_failed": 0
+                "override_failed": 0,
+                "session_ended_manually": 0
             }
             
         total_curr = curr["total_events"]
@@ -360,6 +364,9 @@ class StatsApp(App):
         
         failed_curr = curr["override_failed"]
         failed_prev = prev["override_failed"]
+        
+        manual_curr = curr.get("session_ended_manually", 0)
+        manual_prev = prev.get("session_ended_manually", 0)
         
         ratio_curr = (override_curr / started_curr * 100) if started_curr > 0 else 0.0
         ratio_prev = (override_prev / started_prev * 100) if started_prev > 0 else 0.0
@@ -415,6 +422,7 @@ class StatsApp(App):
             f"  [#cdd6f4]• Blocked attempts (cooldown):[/] [bold #f38ba8]{blocked_curr}[/]{format_change(blocked_curr, blocked_prev)}",
             f"  [#cdd6f4]• Overrides granted:[/] [bold #a6e3a1]{override_curr}[/]{format_change(override_curr, override_prev)}",
             f"  [#cdd6f4]• Failed override attempts:[/] [bold #f38ba8]{failed_curr}[/]{format_change(failed_curr, failed_prev)}",
+            f"  [#cdd6f4]• Manual force ends:[/] [bold #f38ba8]{manual_curr}[/]{format_change(manual_curr, manual_prev)}",
             f"  [#cdd6f4]• Percentage via override:[/] [bold #f9e2af]{ratio_curr:.1f}%[/]{format_ratio_change(ratio_curr, ratio_prev)}"
         ]
         
