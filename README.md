@@ -25,9 +25,14 @@ When limits are exceeded, it launches beautifully styled terminal-based (TUI) wi
 
 ## Screenshots
 
-| System Tray Status | Emergency Override TUI | Usage Statistics TUI |
-| :---: | :---: | :---: |
-| ![System Tray](docs/images/tray_status.png) | ![Emergency Override](docs/images/override_dialog.png) | ![Usage Statistics](docs/images/usage_statistics.png) |
+### System Tray Status
+![System Tray Status](docs/images/tray_status.png)
+
+### Emergency Override TUI
+![Emergency Override TUI](docs/images/override_dialog.png)
+
+### Usage Statistics TUI
+![Usage Statistics TUI](docs/images/usage_statistics.png)
 
 ---
 
