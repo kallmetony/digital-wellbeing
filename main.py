@@ -115,14 +115,7 @@ class OverrideApp(App):
             yield Button("Quit", id="quit_btn")
             
     def on_mount(self) -> None:
-        self.set_interval(0.2, self.clear_clipboard)
         self.query_one("#input_field", Input).focus()
-        
-    def clear_clipboard(self) -> None:
-        try:
-            pyperclip.copy("Copying is disabled.")
-        except Exception:
-            pass
 
     def on_key(self, event) -> None:
         if event.key in ("ctrl+v", "shift+insert"):
@@ -131,6 +124,10 @@ class OverrideApp(App):
             msg = self.query_one("#message_label", Label)
             msg.set_classes("error-msg")
             msg.update("[PASTE BLOCKED] Clipboard shortcuts are disabled!")
+        elif event.key == "down":
+            self.screen.focus_next()
+        elif event.key == "up":
+            self.screen.focus_previous()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         # Detect paste by verifying if change in length is greater than 1 character
@@ -142,7 +139,6 @@ class OverrideApp(App):
             msg = self.query_one("#message_label", Label)
             msg.set_classes("error-msg")
             msg.update("[PASTE DETECTED] Please type manually!")
-            self.clear_clipboard()
         else:
             self.last_value = new_val
             
