@@ -18,7 +18,7 @@ from tray import start_tray
 
 from textual.app import App, ComposeResult
 from textual.widgets import Label, Input, Button, Static
-from textual.containers import Vertical
+from textual.containers import Vertical, Horizontal
 
 # ---------- Textual TUI Apps ----------
 
@@ -191,15 +191,42 @@ class StatsApp(App):
         margin-bottom: 1;
     }
     
+    #nav-container {
+        layout: horizontal;
+        height: 3;
+        align: center middle;
+        margin-bottom: 1;
+    }
+    
+    .nav-btn {
+        width: 8;
+        height: 3;
+        background: #89b4fa;
+        color: #11111b;
+        border: none;
+        margin: 0;
+    }
+    
+    #date_label {
+        width: 1fr;
+        height: 3;
+        text-align: center;
+        text-style: bold;
+        color: #89b4fa;
+        content-align: center middle;
+        margin: 0;
+    }
+    
     .stats-box {
         background: #313244;
         color: #cdd6f4;
         padding: 1 2;
         border: tall #313244;
         margin-bottom: 1;
+        height: 10;
     }
     
-    Button {
+    #close_btn {
         width: 100%;
         background: #f38ba8;
         color: #11111b;
@@ -207,22 +234,194 @@ class StatsApp(App):
     }
     """
     
-    def __init__(self, stats_text, **kwargs):
+    def __init__(self, events, **kwargs):
         super().__init__(**kwargs)
-        self.stats_text = stats_text
+        self.events = events
+        self.daily_data = {}
+        self.active_days = []
+        self.current_index = 0
         
+        # Group events by day
+        for event in self.events:
+            ts = event.get("ts")
+            if not ts:
+                continue
+            date_str = ts[:10]
+            if date_str not in self.daily_data:
+                self.daily_data[date_str] = {
+                    "total_events": 0,
+                    "session_started": 0,
+                    "blocked_cooldown": 0,
+                    "override_granted": 0,
+                    "override_failed": 0
+                }
+            
+            self.daily_data[date_str]["total_events"] += 1
+            
+            evt = event.get("event")
+            if evt == "session_started":
+                self.daily_data[date_str]["session_started"] += 1
+            elif evt == "blocked_cooldown":
+                self.daily_data[date_str]["blocked_cooldown"] += 1
+            elif evt == "override_granted":
+                self.daily_data[date_str]["override_granted"] += 1
+            elif evt == "override_failed":
+                self.daily_data[date_str]["override_failed"] += 1
+                
+        self.active_days = sorted(list(self.daily_data.keys()))
+        self.current_index = len(self.active_days) - 1 # Default to latest day
+
     def compose(self) -> ComposeResult:
         with Vertical(id="container"):
             yield Label("USAGE STATISTICS", classes="title")
-            yield Static(self.stats_text, classes="stats-box")
+            with Horizontal(id="nav-container"):
+                yield Button("←", id="prev_btn", classes="nav-btn")
+                yield Label("", id="date_label")
+                yield Button("→", id="next_btn", classes="nav-btn")
+            yield Static("", classes="stats-box")
             yield Button("Close Window", id="close_btn")
             
     def on_mount(self) -> None:
+        self.update_display()
         self.query_one("#close_btn", Button).focus()
+        
+    def go_prev(self) -> None:
+        if self.current_index > 0:
+            self.current_index -= 1
+            self.update_display()
+            
+    def go_next(self) -> None:
+        if self.current_index < len(self.active_days) - 1:
+            self.current_index += 1
+            self.update_display()
+            
+    def on_key(self, event) -> None:
+        if event.key == "left":
+            self.go_prev()
+        elif event.key == "right":
+            self.go_next()
+        elif event.key == "down":
+            self.screen.focus_next()
+        elif event.key == "up":
+            self.screen.focus_previous()
             
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "close_btn":
+        if event.button.id == "prev_btn":
+            self.go_prev()
+        elif event.button.id == "next_btn":
+            self.go_next()
+        elif event.button.id == "close_btn":
             self.exit()
+            
+    def update_display(self) -> None:
+        if not self.active_days:
+            self.query_one("#date_label", Label).update("No Data")
+            self.query_one(".stats-box", Static).update("[bold #f38ba8]Log is empty.[/]")
+            self.query_one("#prev_btn", Button).disabled = True
+            self.query_one("#next_btn", Button).disabled = True
+            return
+            
+        date_str = self.active_days[self.current_index]
+        curr = self.daily_data[date_str]
+        
+        min_date_str = self.active_days[0]
+        
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            prev_dt = dt - timedelta(days=1)
+            prev_date_str = prev_dt.strftime("%Y-%m-%d")
+        except Exception:
+            prev_date_str = ""
+            
+        prev_exists_in_range = prev_date_str >= min_date_str if prev_date_str else False
+        
+        if prev_exists_in_range and prev_date_str in self.daily_data:
+            prev = self.daily_data[prev_date_str]
+        else:
+            prev = {
+                "total_events": 0,
+                "session_started": 0,
+                "blocked_cooldown": 0,
+                "override_granted": 0,
+                "override_failed": 0
+            }
+            
+        total_curr = curr["total_events"]
+        total_prev = prev["total_events"]
+        
+        started_curr = curr["session_started"]
+        started_prev = prev["session_started"]
+        
+        blocked_curr = curr["blocked_cooldown"]
+        blocked_prev = prev["blocked_cooldown"]
+        
+        override_curr = curr["override_granted"]
+        override_prev = prev["override_granted"]
+        
+        failed_curr = curr["override_failed"]
+        failed_prev = prev["override_failed"]
+        
+        ratio_curr = (override_curr / started_curr * 100) if started_curr > 0 else 0.0
+        ratio_prev = (override_prev / started_prev * 100) if started_prev > 0 else 0.0
+        
+        attempts_curr = override_curr + failed_curr
+        attempts_prev = override_prev + failed_prev
+        
+        def format_change(c, p):
+            if not prev_exists_in_range:
+                return ""
+            if p == 0:
+                if c > 0:
+                    return " ([#a6e3a1]+100.0%[/])"
+                else:
+                    return " ([#a6adc8]0.0%[/])"
+            change = ((c - p) / p) * 100
+            if change > 0:
+                return f" ([#a6e3a1]+{change:.1f}%[/])"
+            elif change < 0:
+                return f" ([#f38ba8]{change:.1f}%[/])"
+            else:
+                return " ([#a6adc8]0.0%[/])"
+
+        def format_ratio_change(c, p):
+            if not prev_exists_in_range:
+                return ""
+            diff = c - p
+            if diff > 0:
+                return f" ([#a6e3a1]+{diff:.1f}%[/])"
+            elif diff < 0:
+                return f" ([#f38ba8]{diff:.1f}%[/])"
+            else:
+                return " ([#a6adc8]0.0%[/])"
+
+        try:
+            date_dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            if date_dt == today:
+                date_label = f"{date_dt.strftime('%B %d, %Y')} (Today)"
+            elif date_dt == yesterday:
+                date_label = f"{date_dt.strftime('%B %d, %Y')} (Yesterday)"
+            else:
+                date_label = date_dt.strftime('%B %d, %Y')
+        except Exception:
+            date_label = date_str
+            
+        self.query_one("#date_label", Label).update(f"📅 {date_label}")
+        
+        stats_lines = [
+            f"  [#cdd6f4]• Total recorded events:[/] [bold #cdd6f4]{total_curr}[/]{format_change(total_curr, total_prev)}",
+            f"  [#cdd6f4]• Sessions started:[/] [bold #a6e3a1]{started_curr}[/]{format_change(started_curr, started_prev)}",
+            f"  [#cdd6f4]• Blocked attempts (cooldown):[/] [bold #f38ba8]{blocked_curr}[/]{format_change(blocked_curr, blocked_prev)}",
+            f"  [#cdd6f4]• Overrides granted:[/] [bold #a6e3a1]{override_curr}[/]{format_change(override_curr, override_prev)}",
+            f"  [#cdd6f4]• Failed override attempts:[/] [bold #f38ba8]{failed_curr}[/]{format_change(failed_curr, failed_prev)}",
+            f"  [#cdd6f4]• Percentage via override:[/] [bold #f9e2af]{ratio_curr:.1f}%[/]{format_ratio_change(ratio_curr, ratio_prev)}"
+        ]
+        
+        self.query_one(".stats-box", Static).update("\n".join(stats_lines))
+        self.query_one("#prev_btn", Button).disabled = (self.current_index == 0)
+        self.query_one("#next_btn", Button).disabled = (self.current_index == len(self.active_days) - 1)
+
 
 # ---------- CLI Entrypoints ----------
 
@@ -242,52 +441,19 @@ def show_stats_cli():
     from config import LOG_FILE
     
     if not os.path.exists(LOG_FILE):
-        stats_text = "[bold #f38ba8]Log is empty - no events recorded yet.[/]"
+        events = []
     else:
         events = []
         with open(LOG_FILE, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    events.append(json.loads(line))
-
-        if not events:
-            stats_text = "[bold #f38ba8]Log is empty.[/]"
-        else:
-            counts = {}
-            for e in events:
-                counts[e["event"]] = counts.get(e["event"], 0) + 1
-
-            first_ts = events[0]["ts"]
-            last_ts = events[-1]["ts"]
-
-            try:
-                first_dt = datetime.fromisoformat(first_ts).strftime("%Y-%m-%d %H:%M")
-                last_dt = datetime.fromisoformat(last_ts).strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                first_dt = first_ts
-                last_dt = last_ts
-
-            blocked = counts.get("blocked_cooldown", 0)
-            started = counts.get("session_started", 0)
-            overrides = counts.get("override_granted", 0)
-            overrides_failed = counts.get("override_failed", 0)
-            ratio = (overrides / started * 100) if started > 0 else 0.0
-
-            stats_lines = [
-                f"[#a6adc8]Period:[/] [#89b4fa]{first_dt}[/] to [#89b4fa]{last_dt}[/]",
-                f"[#a6adc8]Total recorded events:[/] [#cdd6f4]{len(events)}[/]",
-                "",
-                "[bold #89b4fa]Event Breakdown:[/]",
-                f"  [#cdd6f4]• Sessions started:[/] [bold #a6e3a1]{started}[/]",
-                f"  [#cdd6f4]• Blocked attempts (cooldown):[/] [bold #f38ba8]{blocked}[/]",
-                f"  [#cdd6f4]• Overrides granted:[/] [bold #a6e3a1]{overrides}[/]",
-                f"  [#cdd6f4]• Failed override attempts:[/] [bold #f38ba8]{overrides_failed}[/]",
-                f"  [#cdd6f4]• Percentage via override:[/] [bold #f9e2af]{ratio:.1f}%[/]"
-            ]
-            stats_text = "\n".join(stats_lines)
-            
-    app = StatsApp(stats_text)
+                    try:
+                        events.append(json.loads(line))
+                    except Exception:
+                        pass
+                        
+    app = StatsApp(events)
     app.run()
 
 
