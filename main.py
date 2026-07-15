@@ -12,7 +12,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from config import OVERRIDE_STRING_LEN, OVERRIDE_FILE, COOLDOWN_MIN, SESSION_MAX_MIN, OVERRIDE_SESSION_MAX_MIN
-from state_manager import log_event, load_state, save_state, is_inside_hours, get_cooldown_status
+from state_manager import log_event, load_state, save_state, is_inside_hours, get_cooldown_status, check_restrictions_active, load_override
 from tray import start_tray
 
 from textual.app import App, ComposeResult
@@ -309,10 +309,72 @@ class MainMenuApp(App):
 
     def update_dashboard(self) -> None:
         self.state = load_state()
-        from process_monitor import is_running
+        from process_monitor import is_running, kill_process
         from config import PROCESS_NAMES
         running = is_running(PROCESS_NAMES)
         
+        now = datetime.now()
+        active = check_restrictions_active(self.state, now)
+        
+        state_changed = False
+        if active:
+            if running:
+                if not self.state["session_active"]:
+                    override = load_override()
+                    override_valid = override and not override["used"] and now < override["expires_at"]
+                    
+                    if override_valid:
+                        self.state["last_start"] = now
+                        self.state["session_active"] = True
+                        self.state["via_override"] = True
+                        import json
+                        with open(OVERRIDE_FILE, "w") as f:
+                            json.dump({"expires_at": override["expires_at"].isoformat(), "used": True}, f)
+                        save_state(self.state)
+                        log_event("session_started", via_override=True)
+                        state_changed = True
+                    else:
+                        cooldown_active, remaining = get_cooldown_status(self.state)
+                        if cooldown_active:
+                            kill_process(PROCESS_NAMES)
+                            log_event("blocked_cooldown", remaining_seconds=int(remaining.total_seconds()))
+                            running = False
+                        else:
+                            self.state["last_start"] = now
+                            self.state["session_active"] = True
+                            self.state["via_override"] = False
+                            save_state(self.state)
+                            log_event("session_started", via_override=False)
+                            state_changed = True
+                else:
+                    limit = OVERRIDE_SESSION_MAX_MIN if self.state.get("via_override") else SESSION_MAX_MIN
+                    if now - self.state["last_start"] > timedelta(minutes=limit):
+                        kill_process(PROCESS_NAMES)
+                        log_event("session_time_exceeded", limit_min=limit)
+                        self.state["session_active"] = False
+                        self.state["last_end"] = now
+                        save_state(self.state)
+                        running = False
+                        state_changed = True
+            else:
+                if self.state["session_active"]:
+                    duration = (now - self.state["last_start"]).total_seconds()
+                    log_event("session_ended_early", duration_seconds=int(duration))
+                    self.state["session_active"] = False
+                    self.state["last_end"] = now
+                    save_state(self.state)
+                    state_changed = True
+        else:
+            if self.state["session_active"]:
+                self.state["session_active"] = False
+                self.state["via_override"] = False
+                self.state["last_end"] = now
+                save_state(self.state)
+                state_changed = True
+
+        if state_changed:
+            self.state = load_state()
+            
         status_text = self.get_status_text_display(self.state, running)
         
         cooldown_active, _ = get_cooldown_status(self.state)
