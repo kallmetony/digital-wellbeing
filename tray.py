@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw
 from config import (
     PROCESS_NAMES, COOLDOWN_MIN, SESSION_MAX_MIN, OVERRIDE_SESSION_MAX_MIN, POLL_INTERVAL_SEC, OVERRIDE_FILE,
-    COLOR_GREEN, COLOR_RED, COLOR_BLUE, COLOR_MUTED
+    COLOR_GREEN, COLOR_RED, COLOR_BLUE, COLOR_MUTED, COLOR_BG, COLOR_SURFACE
 )
 try:
     from config import SHOW_EXIT_OPTION
@@ -28,15 +28,60 @@ def open_menu_console(tab="dashboard"):
     python_exe = sys.executable.replace("pythonw.exe", "python.exe")
     subprocess.Popen([python_exe, script_path, "--menu", "--tab", tab], creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-def create_image(color_hex):
+def create_image(color_hex, progress=None):
+    if progress is None:
+        progress = 1.0
+        
     width, height = 64, 64
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     dc = ImageDraw.Draw(image)
-    dc.ellipse([2, 2, width-3, height-3], fill=color_hex, outline="#11111b", width=3)
+    
+    # Background ring
+    dc.ellipse([2, 2, width-3, height-3], fill=COLOR_SURFACE)
+    
+    # Progress sector
+    if progress > 0.0:
+        angle = 360 * progress
+        dc.pieslice([2, 2, width-3, height-3], start=-90, end=-90 + angle, fill=color_hex)
+        
+    # Outer border
+    dc.ellipse([2, 2, width-3, height-3], outline="#11111b", width=3)
+    
+    # Inner circle (creating the ring)
+    dc.ellipse([10, 10, width-11, height-11], fill=COLOR_BG, outline="#11111b", width=3)
+    
+    # Clock hands
     dc.ellipse([30, 30, 34, 34], fill="#11111b")
-    dc.line([32, 32, 32, 16], fill="#11111b", width=3)
+    dc.line([32, 32, 32, 20], fill="#11111b", width=3)
     dc.line([32, 32, 44, 32], fill="#11111b", width=3)
+    
     return image
+
+def get_color_and_progress(state, running, now):
+    schedule_enabled = state.get("schedule_enabled", False)
+    inside_work_hours = True
+    if schedule_enabled:
+        inside_work_hours = is_inside_hours(now, state.get("work_start", "09:00"), state.get("work_end", "18:00"))
+        
+    if schedule_enabled and not inside_work_hours and state.get("paused", False):
+        return COLOR_MUTED, None
+    elif running:
+        limit = OVERRIDE_SESSION_MAX_MIN if state.get("via_override") else SESSION_MAX_MIN
+        if state.get("last_start"):
+            elapsed = now - state["last_start"]
+            progress = 1.0 - (elapsed.total_seconds() / (limit * 60.0))
+            progress = max(0.0, min(1.0, progress))
+        else:
+            progress = 1.0
+        return COLOR_GREEN, progress
+    else:
+        cooldown_active, remaining = get_cooldown_status(state)
+        if cooldown_active:
+            progress = remaining.total_seconds() / (COOLDOWN_MIN * 60.0)
+            progress = max(0.0, min(1.0, progress))
+            return COLOR_RED, progress
+        else:
+            return COLOR_BLUE, None
 
 def get_status_text(state, running):
     now = datetime.now()
@@ -140,23 +185,9 @@ def update_icon_status(state, running):
     icon.title = f"Telegram Limiter\nStatus: {status_text}"
     
     now = datetime.now()
-    schedule_enabled = state.get("schedule_enabled", False)
-    inside_work_hours = True
-    if schedule_enabled:
-        inside_work_hours = is_inside_hours(now, state.get("work_start", "09:00"), state.get("work_end", "18:00"))
+    color, progress = get_color_and_progress(state, running, now)
         
-    if schedule_enabled and not inside_work_hours and state.get("paused", False):
-        color = COLOR_MUTED
-    elif running:
-        color = COLOR_GREEN
-    else:
-        cooldown_active, _ = get_cooldown_status(state)
-        if cooldown_active:
-            color = COLOR_RED
-        else:
-            color = COLOR_BLUE
-        
-    icon.icon = create_image(color)
+    icon.icon = create_image(color, progress)
     icon.menu = get_menu(state, running)
 
 def exit_app():
@@ -237,29 +268,14 @@ def start_tray():
     global icon
     state = load_state()
     running = is_running(PROCESS_NAMES)
-    
     now = datetime.now()
-    schedule_enabled = state.get("schedule_enabled", False)
-    inside_work_hours = True
-    if schedule_enabled:
-        inside_work_hours = is_inside_hours(now, state.get("work_start", "09:00"), state.get("work_end", "18:00"))
-        
-    if schedule_enabled and not inside_work_hours and state.get("paused", False):
-        color = COLOR_MUTED
-    elif running:
-        color = COLOR_GREEN
-    else:
-        cooldown_active, _ = get_cooldown_status(state)
-        if cooldown_active:
-            color = COLOR_RED
-        else:
-            color = COLOR_BLUE
-        
+    
+    color, progress = get_color_and_progress(state, running, now)
     status_text = get_status_text(state, running)
     
     icon = pystray.Icon(
         "tg_limiter",
-        create_image(color),
+        create_image(color, progress),
         f"Telegram Limiter\nStatus: {status_text}",
         menu=get_menu(state, running)
     )
